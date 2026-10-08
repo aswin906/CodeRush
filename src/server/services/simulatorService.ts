@@ -180,49 +180,64 @@ export async function processTelemetryIngestion(shipmentId: string, payload: Ing
   };
 }
 
+function seededRandom(seedStr: string, step: number): number {
+  let hash = 0;
+  const combined = `${seedStr}:${step}`;
+  for (let i = 0; i < combined.length; i++) {
+    hash = (hash << 5) - hash + combined.charCodeAt(i);
+    hash |= 0;
+  }
+  const x = Math.sin(hash) * 10000;
+  return x - Math.floor(x);
+}
+
 export function generateSyntheticTelemetry(
   scenario: string,
   tempRef: number,
   rhMin: number,
   rhMax: number,
-  currentRecordsCount: number
+  currentRecordsCount: number,
+  simSeed: string = 'agro-seed-1'
 ) {
   const rhOptimal = (rhMin + rhMax) / 2.0;
   let temperature = tempRef;
   let humidity = rhOptimal;
 
+  const randNoise1 = seededRandom(simSeed, currentRecordsCount * 2) * 0.4 - 0.2;
+  const randNoise2 = seededRandom(simSeed, currentRecordsCount * 2 + 1) * 1.5 - 0.75;
+
   switch (scenario) {
     case 'gradual_warmup': {
       // Temperature rises steadily over time
       const tempIncrease = Math.min(20, currentRecordsCount * 0.8);
-      temperature = tempRef + tempIncrease + (Math.random() * 0.4 - 0.2);
+      temperature = tempRef + tempIncrease + randNoise1;
       humidity = Math.max(60, rhOptimal - (currentRecordsCount * 0.5));
       break;
     }
     case 'sudden_excursion': {
       // Sudden cooling unit failure after initial 2 records
       if (currentRecordsCount >= 2) {
-        temperature = tempRef + 16.0 + (Math.random() * 2.0 - 1.0);
+        temperature = tempRef + 16.0 + (seededRandom(simSeed, currentRecordsCount * 3) * 2.0 - 1.0);
         humidity = Math.max(55, rhOptimal - 20.0);
       } else {
-        temperature = tempRef + (Math.random() * 0.6 - 0.3);
+        temperature = tempRef + randNoise1;
       }
       break;
     }
     case 'door_open_spike': {
       // Periodic temperature spikes every 3 steps
       if (currentRecordsCount % 3 === 0 && currentRecordsCount > 0) {
-        temperature = tempRef + 9.5 + (Math.random() * 1.0);
+        temperature = tempRef + 9.5 + seededRandom(simSeed, currentRecordsCount * 4);
         humidity = rhOptimal - 10.0;
       } else {
-        temperature = tempRef + (Math.random() * 0.4 - 0.2);
+        temperature = tempRef + randNoise1;
       }
       break;
     }
     case 'stable':
     default: {
-      temperature = tempRef + (Math.random() * 0.4 - 0.2);
-      humidity = rhOptimal + (Math.random() * 1.5 - 0.75);
+      temperature = tempRef + randNoise1;
+      humidity = rhOptimal + randNoise2;
       break;
     }
   }
@@ -251,7 +266,8 @@ export async function tickShipmentSimulation(shipmentId: string) {
     shipment.produceType.tempRef,
     shipment.produceType.rhMin,
     shipment.produceType.rhMax,
-    shipment.telemetryRecords.length
+    shipment.telemetryRecords.length,
+    shipment.simSeed || shipment.trackingNumber
   );
 
   return await processTelemetryIngestion(shipmentId, {

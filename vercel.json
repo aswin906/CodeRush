@@ -1,0 +1,16 @@
+{
+  "buildCommand": "prisma generate && vite build client",
+  "outputDirectory": "dist/client",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/simulate",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

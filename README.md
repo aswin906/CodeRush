@@ -48,7 +48,41 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## 🧪 Running Tests
+## ☁️ Vercel Serverless Deployment Guide
+
+AgroSense is fully adapted for serverless deployment on Vercel:
+
+### 1. Vercel Environment Variables
+Set the following environment variables in your Vercel Project Settings (`Settings -> Environment Variables`):
+
+| Variable Name | Purpose | Example / Format |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | Hosted PostgreSQL Connection String | `postgresql://user:pass@ep-pooler.us-east-2.aws.neon.tech/agrosense?sslmode=require` |
+| `CRON_SECRET` | Secret key protecting Vercel Cron routes | `your_vercel_cron_secret_key_here` |
+| `NODE_ENV` | Environment runtime flag | `production` |
+| `PORT` | Backend server port | `3001` |
+
+> **Security Note:** None of these variables use the `VITE_` prefix, guaranteeing they remain server-side only and are never exposed in the client bundle.
+
+### 2. Database Migration Command
+Run database migrations against your production PostgreSQL instance:
+```bash
+npx prisma db push
+# OR for migration history:
+npx prisma migrate deploy
+```
+
+To seed initial produce types, retailers, and shipments in production:
+```bash
+npm run db:seed
+```
+
+### 3. Deploy to Vercel via CLI
+```bash
+npx vercel --prod
+```
+Or connect your GitHub repository `https://github.com/aswin906/CodeRush.git` directly to Vercel!
+
 
 AgroSense includes a comprehensive Vitest test suite with hand-computed expected values for the Arrhenius degradation formulas and an integration test verifying HTTP API ingestion to SQLite persistence:
 

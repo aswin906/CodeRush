@@ -121,4 +121,40 @@ Retailer (id, name, location, contactEmail, contactPhone, preferredProduceTypes)
 | **Live DB Persistence** | `prisma/schema.prisma`, `src/server/db.ts` | SQLite database schema managed via Prisma ORM for full persistence across page reloads. |
 | **Audit Log** | `src/server/services/auditService.ts`, `src/server/routes/audit.ts` | Records automated events (`MODEL_RECALCULATED`, `DISCOUNT_TRIGGERED`, `RETAILER_RESPONSE`). |
 | **Dashboard UI** | `client/src/App.tsx`, `client/src/components/*` | React dashboard with Recharts telemetry graph, metric cards, retailer portal, audit viewer, and simulator controls. |
-| **Unit & Integration Tests** | `src/tests/degradationEngine.test.ts`, `discountEngine.test.ts`, `telemetryIngestion.test.ts` | Vitest test suite with hand-computed mathematical validations and HTTP-to-DB integration test. |
+| **Unit & Integration Tests** | `src/tests/degradationEngine.test.ts`, `discountEngine.test.ts`, `telemetryIngestion.test.ts`, `cron.test.ts` | Vitest test suite with hand-computed mathematical validations, HTTP-to-DB integration test, and cron route security test. |
+
+---
+
+## 7. Deployment Architecture & Serverless Constraints
+
+### 7.1 Serverless Function Adaptations
+On Vercel, traditional long-running background timers (such as `setInterval`) are prohibited because functions are ephemeral. The serverless architecture delegates routing as follows:
+- **`api/index.ts`**: Serves as the primary entrypoint wrapping the Express application instance for all API endpoints (`/api/*`).
+- **`vercel.json`**: Configures Vite static asset routing for `dist/client` and API rewrites to `api/index.ts`.
+
+### 7.2 Hosted PostgreSQL Database Persistence
+Local file-based databases like SQLite are ephemeral and read-only in serverless environments. AgroSense connects to a hosted PostgreSQL provider (e.g. Neon, Supabase) using pooled connection strings via Prisma ORM:
+- **Database Driver**: PostgreSQL (`provider = "postgresql"` in `prisma/schema.prisma`).
+- **Cold-Start Build Safety**: `prisma generate && vite build client` builds static assets without requiring a live database connection during deployment compilation.
+- **Production Migrations**: Executed explicitly using `npx prisma db push` or `npx prisma migrate deploy` in build/deployment scripts.
+
+### 7.3 Vercel Cron Simulation Scheduling & Route Security
+Background loops are replaced with two complementary approaches:
+1. **On-Demand Ticks**: Triggered via `POST /api/simulation/tick` or manual telemetry payload injection from the dashboard UI.
+2. **Vercel Cron Jobs**: Scheduled in `vercel.json` (`path: "/api/cron/simulate"`, `schedule: "*/5 * * * *"`).
+
+#### Cron Route Authorization Security
+The cron route handler (`src/server/routes/cron.ts`) verifies the `Authorization` header against the server-side `CRON_SECRET` environment variable:
+```ts
+const isValid = cronSecret && (
+  authHeader === `Bearer ${cronSecret}` ||
+  headerSecret === cronSecret ||
+  querySecret === cronSecret
+);
+if (!isValid) return res.status(401).json({ error: 'Unauthorized' });
+```
+Requests without the valid `CRON_SECRET` return an HTTP 401 Unauthorized response.
+
+### 7.4 Deterministic Simulator PRNG
+To ensure telemetry ticks remain reproducible and deterministic given a shipment's initial parameters, `generateSyntheticTelemetry()` uses a seeded pseudo-random noise function (`seededRandom(simSeed, recordIndex)`). Given the same shipment seed, identical synthetic readings are produced reproducibly.
+

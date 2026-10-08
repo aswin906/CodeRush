@@ -7,6 +7,7 @@ import discountsRouter from './routes/discounts.js';
 import retailersRouter from './routes/retailers.js';
 import auditRouter from './routes/audit.js';
 import simulationRouter from './routes/simulation.js';
+import cronRouter from './routes/cron.js';
 
 export const app = express();
 
@@ -21,6 +22,7 @@ app.use('/api/discounts', discountsRouter);
 app.use('/api/retailers', retailersRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/simulation', simulationRouter);
+app.use('/api/cron', cronRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
