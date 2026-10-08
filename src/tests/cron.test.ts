@@ -16,7 +16,7 @@ describe('Vercel Cron Route Security Test', () => {
     expect(response.body.error).toContain('Unauthorized');
   });
 
-  it('rejects cron requests with incorrect Bearer secret with 401 Unauthorized', async () => {
+  it('rejects cron requests with incorrect Bearer secret with 401', async () => {
     const response = await request(app)
       .get('/api/cron/simulate')
       .set('Authorization', 'Bearer wrong_secret');
@@ -24,11 +24,12 @@ describe('Vercel Cron Route Security Test', () => {
     expect(response.status).toBe(401);
   });
 
-  it('accepts cron requests with valid Bearer secret header', async () => {
+  it('accepts cron requests with valid Bearer secret and returns success', async () => {
     const response = await request(app)
       .get('/api/cron/simulate')
       .set('Authorization', 'Bearer test_secret_key_12345');
 
+    // Route must return 200 — DB may be unavailable so tickedCount can be 0
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body).toHaveProperty('tickedCount');

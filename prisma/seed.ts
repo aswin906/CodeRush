@@ -3,7 +3,20 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting AgroSense Database Seed...');
+  console.log('🌱 Starting AgroSense Database Seed & Defense-in-Depth RLS Setup...');
+
+  // Enable Row Level Security (RLS) on all public schema tables as defense-in-depth
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "ProduceType" ENABLE ROW LEVEL SECURITY;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Shipment" ENABLE ROW LEVEL SECURITY;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "TelemetryRecord" ENABLE ROW LEVEL SECURITY;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Retailer" ENABLE ROW LEVEL SECURITY;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "DiscountOffer" ENABLE ROW LEVEL SECURITY;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "AuditLog" ENABLE ROW LEVEL SECURITY;`);
+    console.log('🛡️ Row Level Security (RLS) enabled on all 6 public schema tables.');
+  } catch (rlsErr) {
+    console.warn('RLS enablement notice (tables may already have RLS enabled):', rlsErr);
+  }
 
   // Clean existing data
   await prisma.auditLog.deleteMany();

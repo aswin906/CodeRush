@@ -132,11 +132,24 @@ On Vercel, traditional long-running background timers (such as `setInterval`) ar
 - **`api/index.ts`**: Serves as the primary entrypoint wrapping the Express application instance for all API endpoints (`/api/*`).
 - **`vercel.json`**: Configures Vite static asset routing for `dist/client` and API rewrites to `api/index.ts`.
 
-### 7.2 Hosted PostgreSQL Database Persistence
-Local file-based databases like SQLite are ephemeral and read-only in serverless environments. AgroSense connects to a hosted PostgreSQL provider (e.g. Neon, Supabase) using pooled connection strings via Prisma ORM:
-- **Database Driver**: PostgreSQL (`provider = "postgresql"` in `prisma/schema.prisma`).
-- **Cold-Start Build Safety**: `prisma generate && vite build client` builds static assets without requiring a live database connection during deployment compilation.
-- **Production Migrations**: Executed explicitly using `npx prisma db push` or `npx prisma migrate deploy` in build/deployment scripts.
+### 7.2 Hosted PostgreSQL — Supabase
+AgroSense uses [Supabase](https://supabase.com) as its hosted PostgreSQL provider. Two separate connection strings are required:
+
+| Variable | Port | Purpose |
+|---|---|---|
+| `DATABASE_URL` | 6543 (Transaction Pooler / PgBouncer) | Runtime queries from Vercel serverless functions |
+| `DIRECT_URL` | 5432 (Direct Connection) | Prisma migrations only (`prisma migrate deploy`) |
+
+**Prisma `schema.prisma` configuration:**
+```prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+```
+
+**Row Level Security:** All six tables have `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` applied in the seed script and migration, providing defence-in-depth even though the client never touches the database directly.
 
 ### 7.3 Vercel Cron Simulation Scheduling & Route Security
 Background loops are replaced with two complementary approaches:
