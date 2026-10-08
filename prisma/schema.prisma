@@ -1,0 +1,110 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model ProduceType {
+  id             String     @id
+  name           String
+  tempRef        Float      // Reference storage temp in °C
+  shelfLifeRef   Float      // Reference shelf life in hours at tempRef
+  q10            Float      // Temperature sensitivity coefficient (Q10)
+  rhMin          Float      // Minimum ideal relative humidity %
+  rhMax          Float      // Maximum ideal relative humidity %
+  rhPenaltyCoeff Float      // Spoilage multiplier penalty per % RH deviation
+  icon           String     // Lucide icon name or emoji
+  color          String     // Hex code / accent color
+  description    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  shipments      Shipment[]
+}
+
+model Shipment {
+  id                      String            @id @default(uuid())
+  trackingNumber          String            @unique
+  produceTypeId           String
+  produceType             ProduceType       @relation(fields: [produceTypeId], references: [id])
+  origin                  String
+  destination             String
+  quantityKg              Float
+  initialPricePerKg       Float             @default(5.0)
+  status                  String            @default("OPTIMAL") // OPTIMAL, WARNING, CRITICAL, EXPIRED, LIQUIDATING, LIQUIDATED
+  scenario                String            @default("stable") // stable, gradual_warmup, sudden_excursion, door_open_spike
+  initialShelfLifeHours   Float
+  remainingShelfLifeHours Float
+  consumedFraction        Float             @default(0.0)
+  simulating              Boolean           @default(false)
+  simIntervalSeconds      Int               @default(5)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  telemetryRecords        TelemetryRecord[]
+  discountOffers          DiscountOffer[]
+  auditLogs               AuditLog[]
+}
+
+model TelemetryRecord {
+  id                         String   @id @default(uuid())
+  shipmentId                 String
+  shipment                   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  timestamp                  DateTime @default(now())
+  temperature                Float    // °C
+  humidity                   Float    // %
+  transitTimeHours           Float    // Total elapsed transit time in hours
+  consumedFractionStep       Float    // Incremental fraction consumed in this step
+  cumulativeConsumedFraction Float    // Total fraction consumed (0.0 to 1.0+)
+  remainingShelfLifeHours    Float    // Remaining shelf life in hours after this reading
+  createdAt                  DateTime @default(now())
+
+  @@index([shipmentId, timestamp])
+}
+
+model Retailer {
+  id                    String          @id @default(uuid())
+  name                  String
+  location              String
+  contactEmail          String
+  contactPhone          String
+  preferredProduceTypes String          // Comma-separated or JSON string of produce IDs
+  createdAt             DateTime        @default(now())
+
+  discountOffers        DiscountOffer[]
+}
+
+model DiscountOffer {
+  id                             String    @id @default(uuid())
+  shipmentId                     String
+  shipment                       Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  retailerId                     String
+  retailer                       Retailer  @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  discountPercent                Float     // e.g. 25.0 for 25% off
+  originalPricePerKg             Float
+  discountedPricePerKg           Float
+  remainingShelfLifeHoursAtOffer Float
+  status                         String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED
+  responseNotes                  String?
+  respondedAt                    DateTime?
+  createdAt                      DateTime  @default(now())
+
+  @@index([shipmentId])
+  @@index([retailerId])
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  shipmentId String?
+  shipment   Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  eventType  String    // MODEL_RECALCULATED, DISCOUNT_TRIGGERED, RETAILER_RESPONSE, SHIPMENT_CREATED, SIMULATOR_TOGGLED
+  summary    String
+  details    String    // JSON encoded string
+  timestamp  DateTime  @default(now())
+
+  @@index([shipmentId])
+  @@index([eventType])
+}
