@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { tickAllSimulations } from '../services/simulatorService.js';
+import { tickAllSimulations, expireAllStaleOffers } from '../services/simulatorService.js';
 import { createAuditLog } from '../services/auditService.js';
 
 const router = Router();
@@ -27,6 +27,15 @@ router.all('/simulate', async (req, res) => {
   }
 
   try {
+    // 1. Expire stale PENDING offers across all LIQUIDATING shipments first.
+    let expiredCount = 0;
+    try {
+      expiredCount = await expireAllStaleOffers();
+    } catch (expireErr) {
+      console.warn('Cron expiry pass warning:', expireErr);
+    }
+
+    // 2. Tick all active simulations (each tick also runs expiry + dedup internally).
     let results: any[] = [];
     try {
       results = await tickAllSimulations();
@@ -36,9 +45,10 @@ router.all('/simulate', async (req, res) => {
 
     await createAuditLog(
       'SIMULATOR_TOGGLED',
-      `Vercel Cron simulation tick executed for ${results.length} active shipments`,
+      `Vercel Cron tick: ${results.length} shipments ticked, ${expiredCount} offers expired`,
       {
         tickedCount: results.length,
+        expiredCount,
         timestamp: new Date()
       }
     ).catch(() => {});
@@ -47,6 +57,7 @@ router.all('/simulate', async (req, res) => {
       success: true,
       message: `Vercel Cron tick executed successfully`,
       tickedCount: results.length,
+      expiredCount,
       timestamp: new Date()
     });
   } catch (error) {

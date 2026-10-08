@@ -1,7 +1,16 @@
 import { db } from '../db.js';
 
+export type AuditEventType =
+  | 'MODEL_RECALCULATED'
+  | 'DISCOUNT_TRIGGERED'
+  | 'RETAILER_RESPONSE'
+  | 'SHIPMENT_CREATED'
+  | 'SIMULATOR_TOGGLED'
+  | 'OFFER_EXPIRED'
+  | 'OFFER_SUPERSEDED';
+
 export async function createAuditLog(
-  eventType: 'MODEL_RECALCULATED' | 'DISCOUNT_TRIGGERED' | 'RETAILER_RESPONSE' | 'SHIPMENT_CREATED' | 'SIMULATOR_TOGGLED',
+  eventType: AuditEventType,
   summary: string,
   detailsObj: Record<string, any>,
   shipmentId?: string

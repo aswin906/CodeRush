@@ -204,4 +204,74 @@ The UI implements a dark-theme glassmorphism aesthetic built with Vanilla CSS va
 - **Focus Rings**: Universal `:focus-visible` outline rings (`outline: 2px solid #10b981`) applied to all interactive controls and keyboard-selectable rows.
 - **Semantic HTML**: Built using `<header>`, `<nav>`, `<main>`, `<section>`, `<table>`, `<thead>`, and `<button>` elements with `aria-label` attributes on icon-only controls.
 
+---
+
+## 9. DiscountOffer State Machine
+
+### 9.1 States
+
+| Status | Meaning |
+|---|---|
+| `PENDING` | Offer is live and awaiting a retailer response. |
+| `ACCEPTED` | A retailer accepted the offer; the shipment moves to `LIQUIDATED`. |
+| `DECLINED` | A retailer explicitly declined the offer; `respondedAt` is set. |
+| `EXPIRED` | The offer was not responded to within the expiry window (default: 24 h); `expiredAt` is set. |
+| `SUPERSEDED` | A newer offer for the same `(shipmentId, retailerId)` pair was created, or another retailer accepted the shipment; `supersededAt` is set. |
+
+### 9.2 Allowed Transitions
+
+```
+               ┌──────────────────────────────────┐
+               │            PENDING               │
+               └─┬──────────┬──────────┬──────────┘
+                 │          │          │
+          accept │   decline │   expire │   supersede
+                 ▼          ▼          ▼          ▼
+           ACCEPTED    DECLINED    EXPIRED   SUPERSEDED
+```
+
+**Terminal states** — no further transitions are allowed from `ACCEPTED`, `DECLINED`, `EXPIRED`, or `SUPERSEDED`.
+
+### 9.3 Transition Triggers
+
+| Transition | Trigger | Implementation |
+|---|---|---|
+| `PENDING → ACCEPTED` | Retailer calls `POST /api/discounts/:id/respond` with `status: "ACCEPTED"` | `acceptOffer()` in `offerLifecycleService.ts` |
+| `PENDING → DECLINED` | Retailer calls `POST /api/discounts/:id/respond` with `status: "DECLINED"` | `discounts.ts` route handler |
+| `PENDING → EXPIRED` | Offer's `createdAt` is older than `OFFER_EXPIRY_HOURS` (24 h) | `expireStaleOffers()` runs on every tick and every cron invocation |
+| `PENDING → SUPERSEDED` | Another retailer accepts the shipment, OR a dedup pass finds multiple PENDING offers for the same `(shipmentId, retailerId)` | `acceptOffer()` / `supersedeDuplicatePendingOffers()` in `offerLifecycleService.ts` |
+
+### 9.4 Creation Guard (no duplicate offers)
+
+Before creating any new offer, `evaluateAndCreateOffers()` enforces:
+
+1. **ACCEPTED guard** — if any offer for the shipment has `status = ACCEPTED`, no new offers are created.
+2. **PENDING-per-retailer guard** — a retailer that already has a `PENDING` offer for the same shipment is skipped.
+3. **Concurrency guard** — `pg_try_advisory_xact_lock` on a stable integer derived from the shipment UUID prevents two concurrent evaluations from racing inside the same transaction.
+
+### 9.5 Expiry Implementation
+
+Expiry uses a single, timezone-safe UTC comparison:
+
+```ts
+const threshold = new Date(Date.now() - OFFER_EXPIRY_HOURS * 60 * 60 * 1000);
+// Finds all PENDING offers where createdAt < threshold
+```
+
+`expiredAt` is set on the offer row at expiry time, and one `OFFER_EXPIRED` audit log entry is written per expired offer.
+
+### 9.6 Accept Idempotency
+
+`acceptOffer(offerId)` is safe to call more than once:
+- If `status === 'ACCEPTED'` already, it returns the offer unchanged with `alreadyAccepted: true`.
+- Uses `SELECT ... FOR UPDATE` (raw query) to lock the offer row before any state check.
+
+### 9.7 Audit Events per Transition
+
+| Event Type | Written when |
+|---|---|
+| `DISCOUNT_TRIGGERED` | New PENDING offers created for a shipment |
+| `RETAILER_RESPONSE` | Offer accepted or declined by a retailer |
+| `OFFER_EXPIRED` | One entry per offer expired by `expireStaleOffers()` |
+| `OFFER_SUPERSEDED` | One entry per offer marked SUPERSEDED (during accept or dedup) |
 

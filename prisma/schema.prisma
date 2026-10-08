@@ -89,20 +89,26 @@ model DiscountOffer {
   originalPricePerKg             Float
   discountedPricePerKg           Float
   remainingShelfLifeHoursAtOffer Float
-  status                         String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED
+  // Status lifecycle: PENDING → ACCEPTED | DECLINED | EXPIRED | SUPERSEDED
+  status                         String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED, SUPERSEDED
   responseNotes                  String?
-  respondedAt                    DateTime?
+  respondedAt                    DateTime? // Set when ACCEPTED or DECLINED
+  expiredAt                      DateTime? // Set when automatically expired
+  supersededAt                   DateTime? // Set when replaced by a newer offer
   createdAt                      DateTime  @default(now())
 
   @@index([shipmentId])
   @@index([retailerId])
+  @@index([shipmentId, retailerId]) // Fast lookup for dedup guard
 }
 
 model AuditLog {
   id         String    @id @default(uuid())
   shipmentId String?
   shipment   Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
-  eventType  String    // MODEL_RECALCULATED, DISCOUNT_TRIGGERED, RETAILER_RESPONSE, SHIPMENT_CREATED, SIMULATOR_TOGGLED
+  // Events: MODEL_RECALCULATED, DISCOUNT_TRIGGERED, RETAILER_RESPONSE, SHIPMENT_CREATED,
+  //         SIMULATOR_TOGGLED, OFFER_EXPIRED, OFFER_SUPERSEDED
+  eventType  String
   summary    String
   details    String    // JSON encoded string
   timestamp  DateTime  @default(now())

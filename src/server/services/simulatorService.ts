@@ -1,7 +1,7 @@
 import { db } from '../db.js';
 import { computeDegradation } from './degradationEngine.js';
-import { calculateDiscountTier } from './discountEngine.js';
 import { createAuditLog } from './auditService.js';
+import { evaluateAndCreateOffers, expireStaleOffers } from './offerLifecycleService.js';
 
 export interface IngestTelemetryPayload {
   temperature: number;
@@ -18,8 +18,7 @@ export async function processTelemetryIngestion(shipmentId: string, payload: Ing
       telemetryRecords: {
         orderBy: { timestamp: 'desc' },
         take: 1
-      },
-      discountOffers: true
+      }
     }
   });
 
@@ -27,7 +26,7 @@ export async function processTelemetryIngestion(shipmentId: string, payload: Ing
     throw new Error(`Shipment with ID ${shipmentId} not found`);
   }
 
-  const { produceType, telemetryRecords, discountOffers } = shipment;
+  const { produceType, telemetryRecords } = shipment;
   const lastRecord = telemetryRecords[0];
 
   const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
@@ -111,72 +110,19 @@ export async function processTelemetryIngestion(shipmentId: string, payload: Ing
     shipmentId
   );
 
-  // 4. Evaluate Dynamic Liquidation Discount Engine
-  const discountEval = calculateDiscountTier({
-    remainingShelfLifeHours: updatedShipment.remainingShelfLifeHours,
-    initialShelfLifeHours: shipment.initialShelfLifeHours,
-    consumedFraction: updatedShipment.consumedFraction,
-    originalPricePerKg: shipment.initialPricePerKg
-  });
-
-  let createdOffersCount = 0;
-
-  if (discountEval.triggered && shipment.status !== 'LIQUIDATED') {
-    // Find matching retailers who prefer this produce type or all general retailers
-    const retailers = await db.retailer.findMany();
-    const eligibleRetailers = retailers.filter(r => 
-      r.preferredProduceTypes.includes(produceType.id) || r.preferredProduceTypes === ''
-    );
-
-    const targetRetailers = eligibleRetailers.length > 0 ? eligibleRetailers : retailers;
-
-    // Check if offer already created at this discount tier
-    const existingOfferAtTier = discountOffers.find(o => o.discountPercent === discountEval.discountPercent);
-
-    if (!existingOfferAtTier) {
-      for (const retailer of targetRetailers) {
-        await db.discountOffer.create({
-          data: {
-            shipmentId,
-            retailerId: retailer.id,
-            discountPercent: discountEval.discountPercent,
-            originalPricePerKg: shipment.initialPricePerKg,
-            discountedPricePerKg: discountEval.discountedPricePerKg,
-            remainingShelfLifeHoursAtOffer: updatedShipment.remainingShelfLifeHours,
-            status: 'PENDING'
-          }
-        });
-        createdOffersCount++;
-      }
-
-      // Update shipment status to LIQUIDATING
-      await db.shipment.update({
-        where: { id: shipmentId },
-        data: { status: 'LIQUIDATING' }
-      });
-
-      await createAuditLog(
-        'DISCOUNT_TRIGGERED',
-        `Automated ${discountEval.discountPercent}% Liquidation Offer generated for ${shipment.trackingNumber}`,
-        {
-          discountPercent: discountEval.discountPercent,
-          tierName: discountEval.tierName,
-          originalPrice: shipment.initialPricePerKg,
-          discountedPrice: discountEval.discountedPricePerKg,
-          remainingShelfLifeHours: updatedShipment.remainingShelfLifeHours,
-          notifiedRetailerIds: targetRetailers.map(r => r.name)
-        },
-        shipmentId
-      );
-    }
-  }
+  // 4. Evaluate Dynamic Liquidation Discount Engine (includes expiry + dedup + concurrency guard)
+  const offerResult = await evaluateAndCreateOffers(
+    shipmentId,
+    updatedShipment.remainingShelfLifeHours,
+    updatedShipment.consumedFraction
+  );
 
   return {
     telemetry: newTelemetry,
     shipment: updatedShipment,
     degradationResult,
-    discountTier: discountEval,
-    createdOffersCount
+    createdOffersCount: offerResult.createdCount,
+    offerResult
   };
 }
 
@@ -295,4 +241,24 @@ export async function tickAllSimulations() {
     }
   }
   return results;
+}
+
+/**
+ * Runs expiry pass across ALL active LIQUIDATING shipments.
+ * Called by the cron route before ticking simulations.
+ */
+export async function expireAllStaleOffers(): Promise<number> {
+  const liquidatingShipments = await db.shipment.findMany({
+    where: { status: 'LIQUIDATING' }
+  });
+
+  let total = 0;
+  for (const s of liquidatingShipments) {
+    try {
+      total += await expireStaleOffers(s.id);
+    } catch (err) {
+      console.error(`Expiry pass failed for shipment ${s.id}:`, err);
+    }
+  }
+  return total;
 }

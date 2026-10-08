@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { RespondOfferSchema } from '../validators/schemas.js';
 import { createAuditLog } from '../services/auditService.js';
+import { acceptOffer } from '../services/offerLifecycleService.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get('/', async (_req, res) => {
 });
 
 // POST respond to a discount offer (ACCEPT or DECLINE)
+// Accepting is idempotent — calling accept on an already-accepted offer is safe.
 router.post('/:id/respond', async (req, res) => {
   try {
     const parsed = RespondOfferSchema.safeParse(req.body);
@@ -31,12 +33,34 @@ router.post('/:id/respond', async (req, res) => {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.format() });
     }
 
+    const newStatus = parsed.data.status;
+
+    // ── ACCEPT path (delegated to lifecycle service) ────────────────────────
+    if (newStatus === 'ACCEPTED') {
+      try {
+        const result = await acceptOffer(req.params.id, parsed.data.responseNotes);
+        return res.json({
+          ...result.offer,
+          _meta: {
+            alreadyAccepted: result.alreadyAccepted,
+            supersededCount: result.supersededCount
+          }
+        });
+      } catch (err: any) {
+        if (err.message?.includes('not found')) {
+          return res.status(404).json({ error: err.message });
+        }
+        if (err.message?.includes('Cannot accept')) {
+          return res.status(409).json({ error: err.message });
+        }
+        throw err;
+      }
+    }
+
+    // ── DECLINE path ────────────────────────────────────────────────────────
     const offer = await db.discountOffer.findUnique({
       where: { id: req.params.id },
-      include: {
-        shipment: true,
-        retailer: true
-      }
+      include: { shipment: true, retailer: true }
     });
 
     if (!offer) {
@@ -44,17 +68,15 @@ router.post('/:id/respond', async (req, res) => {
     }
 
     if (offer.status !== 'PENDING') {
-      return res.status(400).json({ error: `Offer is already ${offer.status}` });
+      return res.status(409).json({ error: `Offer is already ${offer.status}` });
     }
 
-    const newStatus = parsed.data.status;
     const respondedAt = new Date();
-
     const updatedOffer = await db.discountOffer.update({
       where: { id: offer.id },
       data: {
-        status: newStatus,
-        responseNotes: parsed.data.responseNotes || null,
+        status: 'DECLINED',
+        responseNotes: parsed.data.responseNotes ?? null,
         respondedAt
       },
       include: {
@@ -63,33 +85,15 @@ router.post('/:id/respond', async (req, res) => {
       }
     });
 
-    // If accepted, update shipment status to LIQUIDATED
-    if (newStatus === 'ACCEPTED') {
-      await db.shipment.update({
-        where: { id: offer.shipmentId },
-        data: { status: 'LIQUIDATED' }
-      });
-
-      // Mark other pending offers for this shipment as EXPIRED
-      await db.discountOffer.updateMany({
-        where: {
-          shipmentId: offer.shipmentId,
-          id: { not: offer.id },
-          status: 'PENDING'
-        },
-        data: { status: 'EXPIRED' }
-      });
-    }
-
     await createAuditLog(
       'RETAILER_RESPONSE',
-      `Retailer ${offer.retailer.name} ${newStatus} ${offer.discountPercent}% discount offer for ${offer.shipment.trackingNumber}`,
+      `Retailer ${offer.retailer.name} DECLINED ${offer.discountPercent}% discount offer for ${offer.shipment.trackingNumber}`,
       {
         offerId: offer.id,
         retailerId: offer.retailer.id,
         retailerName: offer.retailer.name,
         trackingNumber: offer.shipment.trackingNumber,
-        status: newStatus,
+        status: 'DECLINED',
         discountedPricePerKg: offer.discountedPricePerKg,
         responseNotes: parsed.data.responseNotes
       },
