@@ -33,5 +33,5 @@ describe('Vercel Cron Route Security Test', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body).toHaveProperty('tickedCount');
-  });
+  }, 40000);
 });

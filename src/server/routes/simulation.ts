@@ -8,7 +8,7 @@ router.post('/tick', async (req, res) => {
   try {
     const { shipmentId } = req.body;
     if (shipmentId) {
-      const result = await tickShipmentSimulation(shipmentId);
+      const result = await tickShipmentSimulation(shipmentId, true);
       return res.json({ message: 'Simulation tick executed for shipment', result });
     } else {
       const results = await tickAllSimulations();

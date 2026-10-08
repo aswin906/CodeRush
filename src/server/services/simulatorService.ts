@@ -194,7 +194,7 @@ export function generateSyntheticTelemetry(
   };
 }
 
-export async function tickShipmentSimulation(shipmentId: string) {
+export async function tickShipmentSimulation(shipmentId: string, force = false) {
   const shipment = await db.shipment.findUnique({
     where: { id: shipmentId },
     include: {
@@ -203,7 +203,12 @@ export async function tickShipmentSimulation(shipmentId: string) {
     }
   });
 
-  if (!shipment || !shipment.simulating) {
+  if (!shipment) {
+    return null;
+  }
+
+  // Bypass simulating toggle check if manually forced by user tick action
+  if (!force && !shipment.simulating) {
     return null;
   }
 
@@ -223,18 +228,17 @@ export async function tickShipmentSimulation(shipmentId: string) {
   });
 }
 
-export async function tickAllSimulations() {
+export async function tickAllSimulations(force = true) {
   const activeShipments = await db.shipment.findMany({
     where: {
-      simulating: true,
-      status: { notIn: ['EXPIRED', 'LIQUIDATED'] }
+      status: { notIn: ['EXPIRED'] }
     }
   });
 
   const results = [];
   for (const s of activeShipments) {
     try {
-      const res = await tickShipmentSimulation(s.id);
+      const res = await tickShipmentSimulation(s.id, force);
       if (res) results.push(res);
     } catch (err) {
       console.error(`Simulation tick failed for shipment ${s.id}:`, err);

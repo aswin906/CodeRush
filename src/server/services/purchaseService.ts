@@ -123,41 +123,37 @@ export async function makePurchase(input: MakePurchaseInput): Promise<MakePurcha
       data: { status: 'ACCEPTED', respondedAt: now }
     });
 
-    // ── Supersede competing PENDING offers for this shipment ─────────────────
-    const otherPending = await tx.discountOffer.findMany({
-      where: { shipmentId: offer.shipmentId, status: 'PENDING', id: { not: offerId } },
-      include: { retailer: true, shipment: true }
-    });
-
-    if (otherPending.length > 0) {
-      await tx.discountOffer.updateMany({
-        where: { id: { in: otherPending.map(o => o.id) } },
-        data: { status: 'SUPERSEDED', supersededAt: now }
+    // ── If stock reaches 0 (SOLD_OUT), supersede remaining PENDING offers ──────
+    let supersededCount = 0;
+    if (newAvailable === 0) {
+      const otherPending = await tx.discountOffer.findMany({
+        where: { shipmentId: offer.shipmentId, status: 'PENDING', id: { not: offerId } },
+        include: { retailer: true, shipment: true }
       });
 
-      for (const o of otherPending) {
-        await createAuditLog(
-          'OFFER_SUPERSEDED',
-          `Offer for retailer ${o.retailer.name} on ${o.shipment.trackingNumber} superseded by purchase`,
-          {
-            supersededOfferId: o.id,
-            purchaseOfferId: offerId,
-            retailerId: o.retailerId,
-            retailerName: o.retailer.name,
-            supersededAt: now
-          },
-          offer.shipmentId,
-          tx
-        );
+      if (otherPending.length > 0) {
+        supersededCount = otherPending.length;
+        await tx.discountOffer.updateMany({
+          where: { id: { in: otherPending.map(o => o.id) } },
+          data: { status: 'SUPERSEDED', supersededAt: now }
+        });
+
+        for (const o of otherPending) {
+          await createAuditLog(
+            'OFFER_SUPERSEDED',
+            `Offer for retailer ${o.retailer.name} on ${o.shipment.trackingNumber} superseded because stock is SOLD OUT`,
+            {
+              supersededOfferId: o.id,
+              purchaseOfferId: offerId,
+              retailerId: o.retailerId,
+              retailerName: o.retailer.name,
+              supersededAt: now
+            },
+            offer.shipmentId,
+            tx
+          );
+        }
       }
-    }
-
-    // ── Update shipment to LIQUIDATED (if still LIQUIDATING) ─────────────────
-    if (lockedShipment.status === 'LIQUIDATING' && newStatus !== 'SOLD_OUT') {
-      await tx.shipment.update({
-        where: { id: offer.shipmentId },
-        data: { status: 'LIQUIDATED' }
-      });
     }
 
     // ── Audit entry ───────────────────────────────────────────────────────────
@@ -174,13 +170,13 @@ export async function makePurchase(input: MakePurchaseInput): Promise<MakePurcha
         pricePerKg,
         totalPrice,
         remainingStock: newAvailable,
-        supersededCount: otherPending.length
+        supersededCount
       },
       offer.shipmentId,
       tx
     );
 
-    return { purchase, idempotent: false, supersededCount: otherPending.length };
+    return { purchase, idempotent: false, supersededCount };
   }, { timeout: 15000, maxWait: 10000 });
 }
 
