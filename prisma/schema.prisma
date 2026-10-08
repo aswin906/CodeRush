@@ -33,9 +33,12 @@ model Shipment {
   produceType             ProduceType       @relation(fields: [produceTypeId], references: [id])
   origin                  String
   destination             String
-  quantityKg              Float
+  quantityKg              Float             // Legacy total weight (kept for backwards compat)
+  initialQuantityKg       Float             // Inventory: total stock at shipment creation
+  availableQuantityKg     Float             // Inventory: remaining purchasable stock
   initialPricePerKg       Float             @default(5.0)
-  status                  String            @default("OPTIMAL") // OPTIMAL, WARNING, CRITICAL, EXPIRED, LIQUIDATING, LIQUIDATED
+  // Status: OPTIMAL, WARNING, CRITICAL, EXPIRED, LIQUIDATING, LIQUIDATED, SOLD_OUT
+  status                  String            @default("OPTIMAL")
   scenario                String            @default("stable") // stable, gradual_warmup, sudden_excursion, door_open_spike
   initialShelfLifeHours   Float
   remainingShelfLifeHours Float
@@ -49,6 +52,10 @@ model Shipment {
   telemetryRecords        TelemetryRecord[]
   discountOffers          DiscountOffer[]
   auditLogs               AuditLog[]
+  purchases               Purchase[]
+
+  // CHECK constraints enforced by a raw migration SQL (see migration)
+  @@index([status])
 }
 
 model TelemetryRecord {
@@ -77,29 +84,57 @@ model Retailer {
   createdAt             DateTime        @default(now())
 
   discountOffers        DiscountOffer[]
+  purchases             Purchase[]
 }
 
 model DiscountOffer {
-  id                             String    @id @default(uuid())
+  id                             String     @id @default(uuid())
   shipmentId                     String
-  shipment                       Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipment                       Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   retailerId                     String
-  retailer                       Retailer  @relation(fields: [retailerId], references: [id], onDelete: Cascade)
-  discountPercent                Float     // e.g. 25.0 for 25% off
+  retailer                       Retailer   @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  discountPercent                Float      // e.g. 25.0 for 25% off
   originalPricePerKg             Float
   discountedPricePerKg           Float
+  offerQuantityKg                Float      @default(0) // availableQuantityKg at offer creation time
   remainingShelfLifeHoursAtOffer Float
   // Status lifecycle: PENDING → ACCEPTED | DECLINED | EXPIRED | SUPERSEDED
-  status                         String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED, SUPERSEDED
+  status                         String     @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED, SUPERSEDED
   responseNotes                  String?
-  respondedAt                    DateTime? // Set when ACCEPTED or DECLINED
-  expiredAt                      DateTime? // Set when automatically expired
-  supersededAt                   DateTime? // Set when replaced by a newer offer
-  createdAt                      DateTime  @default(now())
+  respondedAt                    DateTime?  // Set when ACCEPTED or DECLINED
+  expiredAt                      DateTime?  // Set when automatically expired
+  supersededAt                   DateTime?  // Set when replaced by a newer offer
+  createdAt                      DateTime   @default(now())
+
+  purchase                       Purchase?
 
   @@index([shipmentId])
   @@index([retailerId])
   @@index([shipmentId, retailerId]) // Fast lookup for dedup guard
+}
+
+/// Records each retailer purchase. One offer → at most one purchase (unique offerId).
+/// Stock changes happen only through Purchase rows — never direct Shipment overwrites.
+model Purchase {
+  id          String   @id @default(uuid())
+  offerId     String   @unique          // One offer can only produce one purchase
+  offer       DiscountOffer @relation(fields: [offerId], references: [id])
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  retailerId  String
+  retailer    Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  quantityKg  Float                     // kg purchased
+  pricePerKg  Float                     // price locked at purchase time
+  totalPrice  Float                     // quantityKg × pricePerKg
+  // Status: COMPLETED → REVERSED (no deletion)
+  status      String   @default("COMPLETED")
+  notes       String?
+  reversedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([retailerId])
+  @@index([status])
 }
 
 model AuditLog {
@@ -107,7 +142,7 @@ model AuditLog {
   shipmentId String?
   shipment   Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
   // Events: MODEL_RECALCULATED, DISCOUNT_TRIGGERED, RETAILER_RESPONSE, SHIPMENT_CREATED,
-  //         SIMULATOR_TOGGLED, OFFER_EXPIRED, OFFER_SUPERSEDED
+  //         SIMULATOR_TOGGLED, OFFER_EXPIRED, OFFER_SUPERSEDED, PURCHASE_COMPLETED, PURCHASE_REVERSED
   eventType  String
   summary    String
   details    String    // JSON encoded string

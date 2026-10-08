@@ -7,16 +7,20 @@ export type AuditEventType =
   | 'SHIPMENT_CREATED'
   | 'SIMULATOR_TOGGLED'
   | 'OFFER_EXPIRED'
-  | 'OFFER_SUPERSEDED';
+  | 'OFFER_SUPERSEDED'
+  | 'PURCHASE_COMPLETED'
+  | 'PURCHASE_REVERSED';
 
 export async function createAuditLog(
   eventType: AuditEventType,
   summary: string,
   detailsObj: Record<string, any>,
-  shipmentId?: string
+  shipmentId?: string,
+  txClient?: any
 ) {
+  const client = txClient || db;
   try {
-    return await db.auditLog.create({
+    return await client.auditLog.create({
       data: {
         eventType,
         summary,

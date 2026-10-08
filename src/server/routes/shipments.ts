@@ -72,6 +72,8 @@ router.post('/', async (req, res) => {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const trackingNumber = `AGRO-${randomSuffix}-${produce.id.substring(0, 3).toUpperCase()}`;
 
+    const stockQty = parsed.data.initialQuantityKg ?? parsed.data.quantityKg;
+
     const newShipment = await db.shipment.create({
       data: {
         trackingNumber,
@@ -79,6 +81,8 @@ router.post('/', async (req, res) => {
         origin: parsed.data.origin,
         destination: parsed.data.destination,
         quantityKg: parsed.data.quantityKg,
+        initialQuantityKg: stockQty,
+        availableQuantityKg: stockQty,
         initialPricePerKg: parsed.data.initialPricePerKg,
         status: 'OPTIMAL',
         scenario: parsed.data.scenario,

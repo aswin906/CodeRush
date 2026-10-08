@@ -28,6 +28,8 @@ describe.skipIf(!hasPostgresUrl)('Telemetry Ingestion API Integration Test', () 
           origin: 'Test Farm',
           destination: 'Test Hub',
           quantityKg: 500,
+          initialQuantityKg: 500,
+          availableQuantityKg: 500,
           initialPricePerKg: 5.0,
           status: 'OPTIMAL',
           scenario: 'stable',

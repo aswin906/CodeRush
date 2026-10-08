@@ -99,12 +99,21 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({ shipment, isSelected
             </div>
           </div>
 
-          <div className="col-span-2 bg-slate-950/50 p-2.5 rounded-xl border border-slate-900 flex items-center gap-2">
+          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-slate-900 flex items-center gap-2">
             <Activity className="w-4 h-4 text-purple-400 shrink-0" />
             <div className="min-w-0 flex-1">
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Scenario</span>
               <span className="font-sans font-semibold text-xs text-purple-300 capitalize truncate block">
                 {scenario.replace(/_/g, ' ')}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-slate-900 flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Available Stock</span>
+              <span className={`font-mono-code font-bold text-xs ${shipment.availableQuantityKg <= 0 ? 'text-purple-400' : 'text-slate-200'}`}>
+                {shipment.availableQuantityKg ?? shipment.quantityKg} / {shipment.initialQuantityKg ?? shipment.quantityKg} kg
               </span>
             </div>
           </div>

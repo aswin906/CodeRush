@@ -1,23 +1,26 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Shipment, ProduceType, DiscountOffer, Retailer, AuditLog } from './types';
+import { Shipment, ProduceType, DiscountOffer, Retailer, AuditLog, Purchase } from './types';
 import * as api from './api/client';
-import { Navbar } from './components/Navbar';
+import { Navbar, NavTab } from './components/Navbar';
 import { ShipmentCard } from './components/ShipmentCard';
 import { ShipmentDetail } from './components/ShipmentDetail';
 import { RetailerPortal } from './components/RetailerPortal';
 import { AuditLogViewer } from './components/AuditLogViewer';
+import { PurchasesViewer } from './components/PurchasesViewer';
+import { StatsDashboard } from './components/StatsDashboard';
 import { CreateShipmentModal } from './components/CreateShipmentModal';
 import { ToastContainer, ToastMessage, ToastVariant } from './components/Toast';
 import { ShipmentSkeletonGrid, EmptyState, ErrorState } from './components/StateViews';
 import { Filter, Thermometer } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'retailer' | 'audit'>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [produceTypes, setProduceTypes] = useState<ProduceType[]>([]);
   const [discountOffers, setDiscountOffers] = useState<DiscountOffer[]>([]);
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
 
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [selectedShipmentDetail, setSelectedShipmentDetail] = useState<Shipment | null>(null);
@@ -52,12 +55,13 @@ export const App: React.FC = () => {
     setLoadError(null);
 
     try {
-      const [shipmentsData, produceData, offersData, retailersData, auditData] = await Promise.all([
+      const [shipmentsData, produceData, offersData, retailersData, auditData, purchasesData] = await Promise.all([
         api.fetchShipments(),
         api.fetchProduceTypes(),
         api.fetchDiscountOffers(),
         api.fetchRetailers(),
         api.fetchAuditLogs(),
+        api.fetchPurchases(),
       ]);
 
       setShipments(shipmentsData);
@@ -65,6 +69,7 @@ export const App: React.FC = () => {
       setDiscountOffers(offersData);
       setRetailers(retailersData);
       setAuditLogs(auditData);
+      setPurchases(purchasesData);
 
       if (selectedShipmentId) {
         const updatedDetail = await api.fetchShipmentDetail(selectedShipmentId);
@@ -147,8 +152,24 @@ export const App: React.FC = () => {
     addToast('Telemetry Payload Ingested', `Logged ${temp}°C, ${humidity}% RH for ${updated.trackingNumber}`, 'warning');
   };
 
+  const handlePurchaseOffer = async (offerId: string, quantityKg: number, notes?: string) => {
+    await api.purchaseOffer(offerId, quantityKg, notes);
+    await loadData(true);
+    if (selectedShipmentId) {
+      const updated = await api.fetchShipmentDetail(selectedShipmentId);
+      setSelectedShipmentDetail(updated);
+    }
+  };
+
   const handleRespondOffer = async (offerId: string, status: 'ACCEPTED' | 'DECLINED', notes?: string) => {
-    await api.respondToOffer(offerId, status, notes);
+    if (status === 'ACCEPTED') {
+      // Find offer to get max available stock
+      const targetOffer = discountOffers.find((o) => o.id === offerId);
+      const qty = targetOffer?.shipment?.availableQuantityKg ?? targetOffer?.offerQuantityKg ?? targetOffer?.shipment?.quantityKg ?? 100;
+      await api.purchaseOffer(offerId, qty, notes);
+    } else {
+      await api.respondToOffer(offerId, status, notes);
+    }
     await loadData(true);
     if (selectedShipmentId) {
       const updated = await api.fetchShipmentDetail(selectedShipmentId);
@@ -156,9 +177,15 @@ export const App: React.FC = () => {
     }
     addToast(
       status === 'ACCEPTED' ? 'Discount Offer Accepted' : 'Discount Offer Declined',
-      status === 'ACCEPTED' ? 'Shipment marked as LIQUIDATED to retailer.' : 'Offer rejected.',
+      status === 'ACCEPTED' ? 'Shipment stock purchased successfully.' : 'Offer rejected.',
       status === 'ACCEPTED' ? 'success' : 'info'
     );
+  };
+
+  const handleReversePurchase = async (purchaseId: string, reason?: string) => {
+    await api.reversePurchase(purchaseId, reason);
+    await loadData(true);
+    addToast('Purchase Reversed', 'Transaction reversed and stock returned to available inventory.', 'warning');
   };
 
   // Compute status counts for filter segmented control
@@ -169,6 +196,7 @@ export const App: React.FC = () => {
     CRITICAL: shipments.filter((s) => s.status === 'CRITICAL').length,
     LIQUIDATING: shipments.filter((s) => s.status === 'LIQUIDATING').length,
     LIQUIDATED: shipments.filter((s) => s.status === 'LIQUIDATED').length,
+    SOLD_OUT: shipments.filter((s) => s.status === 'SOLD_OUT').length,
     EXPIRED: shipments.filter((s) => s.status === 'EXPIRED').length,
   };
 
@@ -218,7 +246,7 @@ export const App: React.FC = () => {
                   <div>
                     <h2 className="font-heading font-extrabold text-xl text-slate-100 flex items-center gap-2.5">
                       <Thermometer className="w-5 h-5 text-emerald-400" />
-                      Cold-Chain Produce Shipments
+                      Cold-Chain Produce Shipments & Inventory
                     </h2>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                       Arrhenius degradation kinetic modeling & automated liquidation discount monitoring.
@@ -233,7 +261,7 @@ export const App: React.FC = () => {
                     <span className="text-xs text-slate-500 font-bold px-2 flex items-center gap-1 shrink-0">
                       <Filter className="w-3.5 h-3.5" /> Filter:
                     </span>
-                    {['ALL', 'OPTIMAL', 'WARNING', 'CRITICAL', 'LIQUIDATING', 'LIQUIDATED', 'EXPIRED'].map((st) => {
+                    {['ALL', 'OPTIMAL', 'WARNING', 'CRITICAL', 'LIQUIDATING', 'LIQUIDATED', 'SOLD_OUT', 'EXPIRED'].map((st) => {
                       const isActive = statusFilter === st;
                       const count = filterCounts[st] || 0;
                       return (
@@ -247,7 +275,7 @@ export const App: React.FC = () => {
                               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                           }`}
                         >
-                          <span>{st}</span>
+                          <span>{st === 'SOLD_OUT' ? 'SOLD OUT' : st}</span>
                           <span
                             className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono-code ${
                               isActive
@@ -295,10 +323,23 @@ export const App: React.FC = () => {
           <RetailerPortal
             offers={discountOffers}
             retailers={retailers}
+            onPurchaseOffer={handlePurchaseOffer}
             onRespondOffer={handleRespondOffer}
             onRefresh={() => loadData(true)}
             showToast={addToast}
           />
+        )}
+
+        {activeTab === 'purchases' && (
+          <PurchasesViewer
+            purchases={purchases}
+            onReversePurchase={handleReversePurchase}
+            onRefresh={() => loadData(true)}
+          />
+        )}
+
+        {activeTab === 'stats' && (
+          <StatsDashboard />
         )}
 
         {activeTab === 'audit' && (
@@ -317,7 +358,7 @@ export const App: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 px-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span className="font-medium">AgroSense Cold-Chain Telemetry & Degradation Platform</span>
+          <span className="font-medium">AgroSense Cold-Chain Telemetry & Inventory Management Platform</span>
           <span className="font-mono-code text-[11px] text-slate-600">
             Hosted PostgreSQL Database • Express Serverless API • React Vite Client
           </span>

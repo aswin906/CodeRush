@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { DiscountOffer, Retailer } from '../types';
-import { Store, Tag, CheckCircle, XCircle, ShoppingBag, Clock, ArrowRight, Loader2 } from 'lucide-react';
+import { Store, Tag, CheckCircle, XCircle, ShoppingBag, Loader2, Scale, DollarSign, AlertCircle } from 'lucide-react';
 
 interface RetailerPortalProps {
   offers: DiscountOffer[];
   retailers: Retailer[];
+  onPurchaseOffer: (offerId: string, quantityKg: number, notes?: string) => Promise<void>;
   onRespondOffer: (offerId: string, status: 'ACCEPTED' | 'DECLINED', notes?: string) => Promise<void>;
   onRefresh: () => void;
   showToast?: (title: string, description?: string, variant?: 'success' | 'warning' | 'error' | 'info') => void;
@@ -13,36 +14,74 @@ interface RetailerPortalProps {
 export const RetailerPortal: React.FC<RetailerPortalProps> = ({
   offers,
   retailers,
+  onPurchaseOffer,
   onRespondOffer,
   onRefresh,
   showToast,
 }) => {
   const [selectedRetailerId, setSelectedRetailerId] = useState<string>('all');
   const [notes, setNotes] = useState<{ [offerId: string]: string }>({});
+  const [quantities, setQuantities] = useState<{ [offerId: string]: number }>({});
   const [pendingOfferId, setPendingOfferId] = useState<string | null>(null);
 
   const filteredOffers = selectedRetailerId === 'all'
     ? offers
     : offers.filter((o) => o.retailerId === selectedRetailerId);
 
-  const handleAction = async (offerId: string, status: 'ACCEPTED' | 'DECLINED') => {
-    setPendingOfferId(offerId);
+  const getQuantityForOffer = (offer: DiscountOffer): number => {
+    if (quantities[offer.id] !== undefined) {
+      return quantities[offer.id];
+    }
+    const maxAvailable = offer.shipment?.availableQuantityKg ?? offer.offerQuantityKg ?? 0;
+    return maxAvailable;
+  };
+
+  const handlePurchase = async (offer: DiscountOffer) => {
+    const qty = getQuantityForOffer(offer);
+    const maxAvailable = offer.shipment?.availableQuantityKg ?? offer.offerQuantityKg ?? 0;
+
+    if (qty <= 0) {
+      if (showToast) showToast('Invalid Quantity', 'Purchase quantity must be greater than zero kg.', 'warning');
+      return;
+    }
+    if (qty > maxAvailable) {
+      if (showToast) showToast('Exceeds Stock', `Quantity cannot exceed remaining available stock (${maxAvailable} kg).`, 'warning');
+      return;
+    }
+
+    setPendingOfferId(offer.id);
     try {
-      const offerNotes = notes[offerId] || '';
-      await onRespondOffer(offerId, status, offerNotes);
+      const offerNotes = notes[offer.id] || '';
+      await onPurchaseOffer(offer.id, qty, offerNotes);
       onRefresh();
       if (showToast) {
         showToast(
-          status === 'ACCEPTED' ? 'Discount Offer Accepted' : 'Discount Offer Declined',
-          status === 'ACCEPTED'
-            ? 'The produce batch has been marked as LIQUIDATED to the retailer.'
-            : 'The liquidation offer was declined by the retailer.',
-          status === 'ACCEPTED' ? 'success' : 'info'
+          'Purchase Successful!',
+          `Purchased ${qty} kg of ${offer.shipment?.produceType.name || 'produce'} at $${offer.discountedPricePerKg.toFixed(2)}/kg.`,
+          'success'
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       if (showToast) {
-        showToast('Action Failed', 'Could not record offer response.', 'error');
+        showToast('Purchase Failed', err.message || 'Could not complete purchase transaction.', 'error');
+      }
+    } finally {
+      setPendingOfferId(null);
+    }
+  };
+
+  const handleDecline = async (offerId: string) => {
+    setPendingOfferId(offerId);
+    try {
+      const offerNotes = notes[offerId] || '';
+      await onRespondOffer(offerId, 'DECLINED', offerNotes);
+      onRefresh();
+      if (showToast) {
+        showToast('Offer Declined', 'The liquidation offer was declined by the retailer.', 'info');
+      }
+    } catch (err: any) {
+      if (showToast) {
+        showToast('Action Failed', 'Could not record offer rejection.', 'error');
       }
     } finally {
       setPendingOfferId(null);
@@ -60,7 +99,7 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                 <Store className="w-5 h-5 text-purple-400" />
               </div>
               <h2 className="font-heading font-extrabold text-2xl text-slate-100">
-                Local Retailer Bidding Portal
+                Local Retailer Bidding & Stock Purchase Portal
               </h2>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
@@ -98,7 +137,7 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
             <Tag className="w-5 h-5 text-purple-400" />
             <span>Active Liquidation Offers</span>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono-code font-bold">
-              {filteredOffers.length} Active
+              {filteredOffers.length} Active Bids
             </span>
           </h3>
         </div>
@@ -117,10 +156,18 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
               const shipment = offer.shipment;
               if (!shipment) return null;
 
+              const availableStockKg = shipment.availableQuantityKg ?? offer.offerQuantityKg ?? 0;
+              const isSoldOut = availableStockKg <= 0 || shipment.status === 'SOLD_OUT';
               const isPending = offer.status === 'PENDING';
               const isAccepted = offer.status === 'ACCEPTED';
               const isDeclined = offer.status === 'DECLINED';
+              const isSuperseded = offer.status === 'SUPERSEDED';
+              const isExpired = offer.status === 'EXPIRED';
               const isSubmitting = pendingOfferId === offer.id;
+
+              const currentQty = getQuantityForOffer(offer);
+              const totalPrice = currentQty * offer.discountedPricePerKg;
+              const isQtyValid = currentQty > 0 && currentQty <= availableStockKg;
 
               return (
                 <div
@@ -131,6 +178,10 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                       ? 'border-emerald-500/40 bg-emerald-950/10'
                       : isDeclined
                       ? 'border-rose-500/30 bg-rose-950/10'
+                      : isSuperseded
+                      ? 'border-slate-800 bg-slate-900/30'
+                      : isSoldOut
+                      ? 'border-purple-500/30 bg-purple-950/10'
                       : 'border-purple-500/30 hover:border-purple-500/50'
                   }`}
                 >
@@ -145,7 +196,7 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                           {shipment.produceType.name}
                         </h4>
                         <p className="text-xs font-mono-code text-slate-400">
-                          {shipment.trackingNumber} • {shipment.quantityKg} kg bulk
+                          {shipment.trackingNumber}
                         </p>
                       </div>
                     </div>
@@ -161,27 +212,31 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                             : isDeclined
                             ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                            : isSuperseded
+                            ? 'bg-slate-800 text-slate-400 border-slate-700'
+                            : isSoldOut
+                            ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
                             : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                         }`}
                       >
-                        {offer.status}
+                        {isSoldOut && isPending ? 'SOLD OUT' : offer.status}
                       </span>
                     </div>
                   </div>
 
-                  {/* Offer Stat Tile Details */}
+                  {/* Stock Availability & Price Details */}
                   <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950/60 p-3.5 rounded-xl border border-slate-900/90 mb-4">
                     <div>
-                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Target Retailer</span>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Target Partner</span>
                       <span className="font-semibold text-slate-200 truncate block">
                         {offer.retailer ? offer.retailer.name : 'All Partners'}
                       </span>
                     </div>
 
                     <div>
-                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Shelf Life At Offer</span>
-                      <span className="font-mono-code font-bold text-amber-400">
-                        {offer.remainingShelfLifeHoursAtOffer.toFixed(1)} hours
+                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Available Stock</span>
+                      <span className={`font-mono-code font-bold ${isSoldOut ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {availableStockKg.toLocaleString()} / {shipment.initialQuantityKg || shipment.quantityKg} kg
                       </span>
                     </div>
 
@@ -193,32 +248,78 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                     </div>
 
                     <div className="mt-2">
-                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Liquidation Rate</span>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Discounted Rate</span>
                       <span className="font-mono-code font-extrabold text-base text-emerald-400">
                         ${offer.discountedPricePerKg.toFixed(2)}/kg
                       </span>
                     </div>
                   </div>
 
+                  {/* Quantity Purchase Controls for Pending Offers */}
+                  {isPending && !isSoldOut && (
+                    <div className="space-y-3 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80 mb-3">
+                      <div>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <label htmlFor={`quantity-input-${offer.id}`} className="font-bold text-slate-300 flex items-center gap-1">
+                            <Scale className="w-3.5 h-3.5 text-purple-400" /> Quantity to Purchase (kg):
+                          </label>
+                          <span className="font-mono-code text-[11px] text-slate-400">
+                            Max: {availableStockKg} kg
+                          </span>
+                        </div>
+                        <input
+                          id={`quantity-input-${offer.id}`}
+                          type="number"
+                          min={1}
+                          max={availableStockKg}
+                          step={1}
+                          value={currentQty}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setQuantities({ ...quantities, [offer.id]: val });
+                          }}
+                          disabled={isSubmitting}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono-code font-bold text-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+
+                      {/* Real-time Total Price Calculation */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                        <span className="text-slate-400 flex items-center gap-1 font-semibold">
+                          <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Total Cost:
+                        </span>
+                        <span className="font-mono-code font-extrabold text-sm text-emerald-400">
+                          ${totalPrice.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {!isQtyValid && currentQty > 0 && (
+                        <div className="text-[11px] text-rose-400 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Quantity must be between 1 and {availableStockKg} kg
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Actions for Pending Offers */}
                   {isPending && (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2">
                       <input
                         type="text"
                         aria-label="Response notes"
-                        placeholder="Optional notes (e.g. Pickup dock timeframe, vehicle ID)"
+                        placeholder="Optional notes (e.g. Dock pickup details)"
                         value={notes[offer.id] || ''}
                         onChange={(e) => setNotes({ ...notes, [offer.id]: e.target.value })}
-                        disabled={isSubmitting}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-50"
+                        disabled={isSubmitting || isSoldOut}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-1.5 text-xs text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-50"
                       />
 
                       <div className="flex items-center gap-2">
                         <button
                           id={`btn-portal-accept-${offer.id}`}
-                          onClick={() => handleAction(offer.id, 'ACCEPTED')}
-                          disabled={isSubmitting}
-                          aria-label={`Accept offer for ${shipment.produceType.name}`}
+                          onClick={() => handlePurchase(offer)}
+                          disabled={isSubmitting || isSoldOut || !isQtyValid}
+                          aria-label={`Purchase ${currentQty} kg for offer`}
                           className="flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
                         >
                           {isSubmitting ? (
@@ -226,15 +327,21 @@ export const RetailerPortal: React.FC<RetailerPortalProps> = ({
                           ) : (
                             <CheckCircle className="w-4 h-4" />
                           )}
-                          <span>{isSubmitting ? 'Processing...' : 'Accept & Purchase Batch'}</span>
+                          <span>
+                            {isSubmitting
+                              ? 'Processing...'
+                              : isSoldOut
+                              ? 'Batch Sold Out'
+                              : `Purchase ${currentQty} kg ($${totalPrice.toFixed(2)})`}
+                          </span>
                         </button>
 
                         <button
                           id={`btn-portal-decline-${offer.id}`}
-                          onClick={() => handleAction(offer.id, 'DECLINED')}
+                          onClick={() => handleDecline(offer.id)}
                           disabled={isSubmitting}
                           aria-label={`Decline offer for ${shipment.produceType.name}`}
-                          className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center gap-1 transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none disabled:opacity-50"
+                          className="py-2.5 px-3 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center gap-1 transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none disabled:opacity-50"
                         >
                           <XCircle className="w-4 h-4 text-slate-400" />
                           <span>Decline</span>

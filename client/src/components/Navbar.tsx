@@ -1,9 +1,11 @@
 import React from 'react';
-import { Thermometer, Store, ClipboardList, Plus, RefreshCw, Radio } from 'lucide-react';
+import { Thermometer, Store, ClipboardList, Plus, RefreshCw, ShoppingCart, BarChart3 } from 'lucide-react';
+
+export type NavTab = 'dashboard' | 'retailer' | 'purchases' | 'stats' | 'audit';
 
 interface NavbarProps {
-  activeTab: 'dashboard' | 'retailer' | 'audit';
-  setActiveTab: (tab: 'dashboard' | 'retailer' | 'audit') => void;
+  activeTab: NavTab;
+  setActiveTab: (tab: NavTab) => void;
   onOpenCreateModal: () => void;
   onTriggerTick: () => void;
   isTicking: boolean;
@@ -53,12 +55,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Navigation Bar */}
         <nav
           aria-label="Main Navigation"
-          className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800/90 shadow-inner"
+          className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800/90 shadow-inner flex-wrap justify-center"
         >
           <button
             id="nav-tab-dashboard"
             onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
               activeTab === 'dashboard'
                 ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -74,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             id="nav-tab-retailer"
             onClick={() => setActiveTab('retailer')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
               activeTab === 'retailer'
                 ? 'bg-gradient-to-r from-purple-500/20 to-indigo-500/20 text-purple-400 border border-purple-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -85,9 +87,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            id="nav-tab-purchases"
+            onClick={() => setActiveTab('purchases')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
+              activeTab === 'purchases'
+                ? 'bg-gradient-to-r from-blue-500/20 to-sky-500/20 text-blue-400 border border-blue-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>Purchases</span>
+          </button>
+
+          <button
+            id="nav-tab-stats"
+            onClick={() => setActiveTab('stats')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
+              activeTab === 'stats'
+                ? 'bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-teal-300 border border-teal-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Analytics</span>
+          </button>
+
+          <button
             id="nav-tab-audit"
             onClick={() => setActiveTab('audit')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
               activeTab === 'audit'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'

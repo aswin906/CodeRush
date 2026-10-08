@@ -217,9 +217,15 @@ export async function evaluateAndCreateOffers(
       return { createdCount: 0, skippedReason: 'shipment_not_found', expiredCount: 0, supersededCount: 0 };
     }
 
-    // ── Guard: skip if shipment is already LIQUIDATED ───────────────────────
-    if (shipment.status === 'LIQUIDATED') {
+    // ── Guard: skip if shipment is already LIQUIDATED or SOLD_OUT ──────────
+    if (shipment.status === 'LIQUIDATED' || shipment.status === 'SOLD_OUT') {
       return { createdCount: 0, skippedReason: 'already_liquidated', expiredCount: 0, supersededCount: 0 };
+    }
+
+    // ── Guard: skip if no stock available ───────────────────────────────────
+    const availableQty = (shipment as any).availableQuantityKg ?? 0;
+    if (availableQty <= 0) {
+      return { createdCount: 0, skippedReason: 'no_stock', expiredCount: 0, supersededCount: 0 };
     }
 
     // ── Guard: skip if there is already an ACCEPTED offer ──────────────────
@@ -277,6 +283,7 @@ export async function evaluateAndCreateOffers(
           discountPercent: discountEval.discountPercent,
           originalPricePerKg: shipment.initialPricePerKg,
           discountedPricePerKg: discountEval.discountedPricePerKg,
+          offerQuantityKg: availableQty,
           remainingShelfLifeHoursAtOffer: remainingShelfLifeHours,
           status: 'PENDING'
         }

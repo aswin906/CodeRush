@@ -16,6 +16,7 @@ export const CreateShipmentSchema = z.object({
   origin: z.string().min(1, 'origin is required'),
   destination: z.string().min(1, 'destination is required'),
   quantityKg: z.number().positive('quantityKg must be positive'),
+  initialQuantityKg: z.number().positive('initialQuantityKg must be positive').optional(),
   initialPricePerKg: z.number().positive('initialPricePerKg must be positive').optional().default(5.0),
   scenario: z.enum(['stable', 'gradual_warmup', 'sudden_excursion', 'door_open_spike']).default('stable'),
   simulating: z.boolean().optional().default(true),
@@ -31,4 +32,9 @@ export const ToggleSimulatorSchema = z.object({
 export const RespondOfferSchema = z.object({
   status: z.enum(['ACCEPTED', 'DECLINED']),
   responseNotes: z.string().optional()
+});
+
+export const PurchaseOfferSchema = z.object({
+  quantityKg: z.number().positive('quantityKg must be greater than zero'),
+  notes: z.string().optional()
 });

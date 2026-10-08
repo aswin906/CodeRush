@@ -78,6 +78,8 @@ async function createTestShipment(produce: any, suffix: string) {
       origin: 'Farm A',
       destination: 'Hub B',
       quantityKg: 100,
+      initialQuantityKg: 100,
+      availableQuantityKg: 100,
       initialPricePerKg: 5.0,
       status: 'CRITICAL',
       scenario: 'stable',

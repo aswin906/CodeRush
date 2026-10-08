@@ -33,6 +33,23 @@ export interface Retailer {
   preferredProduceTypes: string;
 }
 
+export interface Purchase {
+  id: string;
+  offerId: string;
+  offer?: DiscountOffer;
+  shipmentId: string;
+  shipment?: Shipment;
+  retailerId: string;
+  retailer?: Retailer;
+  quantityKg: number;
+  pricePerKg: number;
+  totalPrice: number;
+  status: 'COMPLETED' | 'REVERSED';
+  notes?: string;
+  reversedAt?: string;
+  createdAt: string;
+}
+
 export interface DiscountOffer {
   id: string;
   shipmentId: string;
@@ -42,11 +59,15 @@ export interface DiscountOffer {
   discountPercent: number;
   originalPricePerKg: number;
   discountedPricePerKg: number;
+  offerQuantityKg?: number;
   remainingShelfLifeHoursAtOffer: number;
-  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'SUPERSEDED';
   responseNotes?: string;
   respondedAt?: string;
+  expiredAt?: string;
+  supersededAt?: string;
   createdAt: string;
+  purchase?: Purchase;
 }
 
 export interface Shipment {
@@ -57,8 +78,10 @@ export interface Shipment {
   origin: string;
   destination: string;
   quantityKg: number;
+  initialQuantityKg: number;
+  availableQuantityKg: number;
   initialPricePerKg: number;
-  status: 'OPTIMAL' | 'WARNING' | 'CRITICAL' | 'EXPIRED' | 'LIQUIDATING' | 'LIQUIDATED';
+  status: 'OPTIMAL' | 'WARNING' | 'CRITICAL' | 'EXPIRED' | 'LIQUIDATING' | 'LIQUIDATED' | 'SOLD_OUT';
   scenario: 'stable' | 'gradual_warmup' | 'sudden_excursion' | 'door_open_spike';
   initialShelfLifeHours: number;
   remainingShelfLifeHours: number;
@@ -70,14 +93,45 @@ export interface Shipment {
   telemetryRecords?: TelemetryRecord[];
   discountOffers?: DiscountOffer[];
   auditLogs?: AuditLog[];
+  purchases?: Purchase[];
 }
 
 export interface AuditLog {
   id: string;
   shipmentId?: string;
   shipment?: Shipment;
-  eventType: 'MODEL_RECALCULATED' | 'DISCOUNT_TRIGGERED' | 'RETAILER_RESPONSE' | 'SHIPMENT_CREATED' | 'SIMULATOR_TOGGLED';
+  eventType: 'MODEL_RECALCULATED' | 'DISCOUNT_TRIGGERED' | 'RETAILER_RESPONSE' | 'SHIPMENT_CREATED' | 'SIMULATOR_TOGGLED' | 'OFFER_EXPIRED' | 'OFFER_SUPERSEDED' | 'PURCHASE_COMPLETED' | 'PURCHASE_REVERSED';
   summary: string;
   details: string;
   timestamp: string;
+}
+
+export interface BuyerStats {
+  retailerId: string;
+  retailerName: string;
+  totalKgBought: number;
+  totalSpent: number;
+  avgDiscountPercent: number;
+  completedPurchasesCount: number;
+  reversedPurchasesCount: number;
+}
+
+export interface ProductStats {
+  produceTypeId: string;
+  produceTypeName: string;
+  icon: string;
+  color: string;
+  totalLiquidatedShipments: number;
+  soldOutShipments: number;
+  totalKgSold: number;
+  totalRevenueRecovered: number;
+  avgDiscountOffered: number;
+}
+
+export interface StatsSummary {
+  totalRevenueRecovered: number;
+  totalStockSoldKg: number;
+  topBuyer: string | null;
+  mostLiquidatedProduct: string | null;
+  offerStatusCounts: Record<string, number>;
 }

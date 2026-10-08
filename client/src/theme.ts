@@ -2,7 +2,7 @@
  * AgroSense Design System Tokens & Status Color Mapping
  */
 
-export type ShipmentStatus = 'OPTIMAL' | 'WARNING' | 'CRITICAL' | 'LIQUIDATING' | 'LIQUIDATED' | 'EXPIRED';
+export type ShipmentStatus = 'OPTIMAL' | 'WARNING' | 'CRITICAL' | 'LIQUIDATING' | 'LIQUIDATED' | 'EXPIRED' | 'SOLD_OUT';
 
 export interface StatusConfig {
   label: string;
@@ -22,6 +22,7 @@ export interface StatusConfig {
  * - LIQUIDATING: orange
  * - LIQUIDATED: blue (sky)
  * - EXPIRED: gray (slate)
+ * - SOLD_OUT: violet / purple
  */
 export const STATUS_MAP: Record<ShipmentStatus, StatusConfig> = {
   OPTIMAL: {
@@ -77,6 +78,15 @@ export const STATUS_MAP: Record<ShipmentStatus, StatusConfig> = {
     progressGradient: 'from-slate-600 to-slate-700',
     glow: '',
     hex: '#64748b',
+  },
+  SOLD_OUT: {
+    label: 'SOLD OUT',
+    badgeBg: 'bg-purple-500/10',
+    badgeText: 'text-purple-400',
+    badgeBorder: 'border-purple-500/30',
+    progressGradient: 'from-purple-600 to-indigo-500',
+    glow: 'glow-purple',
+    hex: '#a855f7',
   },
 };
 
