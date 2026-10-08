@@ -10,7 +10,8 @@
   "crons": [
     {
       "path": "/api/cron/simulate",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
+
 }
