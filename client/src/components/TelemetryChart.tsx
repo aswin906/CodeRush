@@ -9,7 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
-  Legend
+  Legend,
 } from 'recharts';
 
 interface TelemetryChartProps {
@@ -20,8 +20,8 @@ interface TelemetryChartProps {
 export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords, produceType }) => {
   if (!telemetryRecords || telemetryRecords.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-        No telemetry records available yet.
+      <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-xs bg-slate-950/40 rounded-2xl border border-slate-900">
+        <span>No telemetry records logged yet for this shipment.</span>
       </div>
     );
   }
@@ -31,31 +31,32 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords
     temperature: rec.temperature,
     humidity: rec.humidity,
     remainingHours: rec.remainingShelfLifeHours,
-    consumedFraction: (rec.cumulativeConsumedFraction * 100).toFixed(1)
+    consumedFraction: (rec.cumulativeConsumedFraction * 100).toFixed(1),
   }));
 
   return (
-    <div className="w-full h-72">
+    <div className="w-full h-80 pt-2">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
           <defs>
             <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+              <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="rhGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
             </linearGradient>
           </defs>
 
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-          
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.07)" />
+
           <XAxis
             dataKey="transitTime"
             stroke="#94a3b8"
             fontSize={11}
             tickFormatter={(val) => `${val}h`}
+            tickLine={false}
           />
 
           {/* Left Axis: Temperature */}
@@ -65,6 +66,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords
             fontSize={11}
             domain={['auto', 'auto']}
             unit="°C"
+            tickLine={false}
           />
 
           {/* Right Axis: Humidity */}
@@ -75,28 +77,37 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords
             fontSize={11}
             domain={[40, 100]}
             unit="%"
+            tickLine={false}
           />
 
           <Tooltip
             contentStyle={{
-              backgroundColor: '#0f172a',
-              borderColor: 'rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
-              fontSize: '12px'
+              backgroundColor: '#090d16',
+              borderColor: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: '14px',
+              boxShadow: '0 12px 32px 0 rgba(0, 0, 0, 0.6)',
+              fontSize: '12px',
+              color: '#f3f4f6',
             }}
             labelFormatter={(label) => `Transit Time: ${label} hours`}
           />
 
-          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} />
 
-          {/* Ideal Temperature Reference Line */}
+          {/* Reference Temperature Line for produce type */}
           <ReferenceLine
             yAxisId="left"
             y={produceType.tempRef}
             stroke="#38bdf8"
             strokeDasharray="4 4"
-            label={{ value: `T_ref (${produceType.tempRef}°C)`, fill: '#38bdf8', fontSize: 10, position: 'insideTopLeft' }}
+            strokeWidth={1.5}
+            label={{
+              value: `T_ref (${produceType.tempRef}°C)`,
+              fill: '#38bdf8',
+              fontSize: 11,
+              position: 'insideTopLeft',
+              fontWeight: 600,
+            }}
           />
 
           {/* Temperature Line */}
@@ -108,7 +119,7 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords
             stroke="#06b6d4"
             strokeWidth={2.5}
             dot={{ r: 3, fill: '#06b6d4' }}
-            activeDot={{ r: 6 }}
+            activeDot={{ r: 6, fill: '#38bdf8' }}
           />
 
           {/* Humidity Line */}
@@ -116,11 +127,11 @@ export const TelemetryChart: React.FC<TelemetryChartProps> = ({ telemetryRecords
             yAxisId="right"
             type="monotone"
             dataKey="humidity"
-            name="Humidity (%)"
+            name="Relative Humidity (%)"
             stroke="#10b981"
             strokeWidth={2}
             strokeDasharray="3 3"
-            dot={{ r: 2, fill: '#10b981' }}
+            dot={{ r: 2.5, fill: '#10b981' }}
           />
         </ComposedChart>
       </ResponsiveContainer>

@@ -171,3 +171,37 @@ Requests without the valid `CRON_SECRET` return an HTTP 401 Unauthorized respons
 ### 7.4 Deterministic Simulator PRNG
 To ensure telemetry ticks remain reproducible and deterministic given a shipment's initial parameters, `generateSyntheticTelemetry()` uses a seeded pseudo-random noise function (`seededRandom(simSeed, recordIndex)`). Given the same shipment seed, identical synthetic readings are produced reproducibly.
 
+---
+
+## 8. Frontend UI Design System & Component Architecture
+
+### 8.1 Design System & Color Tokens (`client/src/theme.ts`)
+The UI implements a dark-theme glassmorphism aesthetic built with Vanilla CSS variables and Tailwind CSS utilities:
+- **Display Typography**: Google Font `Outfit` (`font-heading`) for titles, headers, and major metrics.
+- **Body Typography**: Google Font `Inter` (`font-sans`) for primary copy, labels, and form controls.
+- **Monospace Typography**: Google Font `JetBrains Mono` (`font-mono-code`) for tracking IDs, numeric readings, prices, and JSON payloads.
+
+#### Strict Status Color Mapping
+| Status | Badge Background & Text | Progress Bar Gradient | Hex Token | State Meaning |
+|---|---|---|---|---|
+| `OPTIMAL` | `bg-emerald-500/10 text-emerald-400 border-emerald-500/30` | `from-emerald-500 to-teal-400` | `#10b981` | Fresh, ideal storage conditions ($L_{\text{rem}} > 65\%$) |
+| `WARNING` | `bg-amber-500/10 text-amber-400 border-amber-500/30` | `from-amber-500 to-yellow-400` | `#f59e0b` | Elevated degradation rate ($35\% < L_{\text{rem}} \le 65\%$) |
+| `CRITICAL` | `bg-rose-500/10 text-rose-400 border-rose-500/30` | `from-rose-500 to-red-400` | `#f43f5e` | Severe shelf life depletion ($L_{\text{rem}} \le 35\%$) |
+| `LIQUIDATING` | `bg-orange-500/10 text-orange-400 border-orange-500/30` | `from-orange-500 to-amber-500` | `#f97316` | Active discount offer broadcast to local retailers |
+| `LIQUIDATED` | `bg-sky-500/10 text-sky-400 border-sky-500/30` | `from-sky-500 to-blue-500` | `#0ea5e9` | Batch purchased by retailer via bidding portal |
+| `EXPIRED` | `bg-slate-800 text-slate-400 border-slate-700` | `from-slate-600 to-slate-700` | `#64748b` | Produce fully degraded ($L_{\text{rem}} \le 0$) |
+
+### 8.2 Component Hierarchy & Responsiveness
+- **`Navbar`**: Header with logo, live telemetry pulse badge, nav tab bar, and action triggers.
+- **`ShipmentCard`**: Glassmorphism cards rendered in a 3-column desktop grid (`lg:grid-cols-3`), 2-column tablet grid (`md:grid-cols-2`), and 1-column mobile grid (`grid-cols-1`). Includes produce icon container, route info, stat grid, and progress bar.
+- **`TelemetryChart`**: Recharts dual-axis chart (Temperature & Humidity) featuring a reference line at $T_{\text{ref}}$.
+- **`RetailerPortal`**: Marketplace interface highlighting discount percentages (`20% OFF` to `80% OFF`), target retailer identity dropdown, and pending button state locks.
+- **`AuditLogViewer`**: Semantic data table with sticky header (`sticky top-0 bg-slate-950`), timestamp, event badge, and expandable formatted JSON payload row.
+- **`ToastContainer`**: Accessible toast overlay providing instant visual feedback for telemetry ticks, shipment creation, and offer responses.
+
+### 8.3 Accessibility & Contrast Standards
+- **WCAG AA Compliance**: All text elements maintain high-contrast ratios against the `--bg-main` background (`#090d16`).
+- **Focus Rings**: Universal `:focus-visible` outline rings (`outline: 2px solid #10b981`) applied to all interactive controls and keyboard-selectable rows.
+- **Semantic HTML**: Built using `<header>`, `<nav>`, `<main>`, `<section>`, `<table>`, `<thead>`, and `<button>` elements with `aria-label` attributes on icon-only controls.
+
+

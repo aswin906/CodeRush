@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProduceType } from '../types';
-import { X, Plus, Package, MapPin, DollarSign, Activity } from 'lucide-react';
+import { X, Package, Loader2 } from 'lucide-react';
 
 interface CreateShipmentModalProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
   isOpen,
   onClose,
   produceTypes,
-  onSubmit
+  onSubmit,
 }) => {
   if (!isOpen) return null;
 
@@ -45,7 +45,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
         destination,
         quantityKg,
         initialPricePerKg,
-        scenario
+        scenario,
       });
       onClose();
     } catch (err: any) {
@@ -55,14 +55,18 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
     }
   };
 
-  const selectedProduce = produceTypes.find(p => p.id === produceTypeId);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="glass-panel w-full max-w-lg p-6 relative shadow-2xl border-slate-700/80 animate-in fade-in zoom-in-95 duration-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        className="glass-panel w-full max-w-lg p-6 relative shadow-2xl border-slate-700/80 animate-in fade-in zoom-in-95 duration-200 rounded-2xl"
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all"
+          aria-label="Close modal"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
         >
           <X className="w-5 h-5" />
         </button>
@@ -72,7 +76,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
             <Package className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-heading font-extrabold text-lg text-slate-100">
+            <h3 id="modal-title" className="font-heading font-extrabold text-lg text-slate-100">
               Register Cold-Chain Shipment
             </h3>
             <p className="text-xs text-slate-400">
@@ -90,15 +94,16 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Produce Type Selector */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
               Select Produce Type
             </label>
             <div className="grid grid-cols-2 gap-2">
               {produceTypes.map((pt) => (
-                <div
+                <button
                   key={pt.id}
+                  type="button"
                   onClick={() => setProduceTypeId(pt.id)}
-                  className={`p-3 rounded-xl border cursor-pointer flex items-center gap-2.5 transition-all ${
+                  className={`p-3 rounded-xl border text-left flex items-center gap-2.5 transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none ${
                     produceTypeId === pt.id
                       ? 'bg-slate-900 border-emerald-500/60 ring-1 ring-emerald-500/50'
                       : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
@@ -113,15 +118,15 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
                       T_ref: {pt.tempRef}°C • {pt.shelfLifeRef}h
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Route info */}
+          {/* Route Info */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="input-origin" className="block text-xs font-semibold text-slate-300 mb-1">
                 Origin Location
               </label>
               <input
@@ -130,12 +135,12 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
                 required
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="input-destination" className="block text-xs font-semibold text-slate-300 mb-1">
                 Destination Market
               </label>
               <input
@@ -144,7 +149,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
                 required
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               />
             </div>
           </div>
@@ -152,7 +157,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
           {/* Quantity & Price */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="input-quantity" className="block text-xs font-semibold text-slate-300 mb-1">
                 Quantity (kg)
               </label>
               <input
@@ -162,12 +167,12 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
                 required
                 value={quantityKg}
                 onChange={(e) => setQuantityKg(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono-code text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono-code text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="input-price" className="block text-xs font-semibold text-slate-300 mb-1">
                 Base Price ($/kg)
               </label>
               <input
@@ -178,21 +183,21 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
                 required
                 value={initialPricePerKg}
                 onChange={(e) => setInitialPricePerKg(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono-code text-emerald-400 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono-code text-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               />
             </div>
           </div>
 
           {/* Simulation Scenario */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+            <label htmlFor="select-initial-scenario" className="block text-xs font-semibold text-slate-300 mb-1.5">
               Telemetry Simulator Initial Scenario
             </label>
             <select
               id="select-initial-scenario"
               value={scenario}
               onChange={(e) => setScenario(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-purple-300 focus:outline-none focus:border-purple-500"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-purple-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               <option value="stable">❄️ Stable Cold Chain (Constant ~Ideal Temp)</option>
               <option value="gradual_warmup">🌡️ Gradual Warm-up (Refrigeration Degradation)</option>
@@ -205,7 +210,7 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 transition-all"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
             >
               Cancel
             </button>
@@ -213,9 +218,10 @@ export const CreateShipmentModal: React.FC<CreateShipmentModalProps> = ({
               id="btn-submit-create-shipment"
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:from-emerald-400 hover:to-teal-400 shadow-md shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:from-emerald-400 hover:to-teal-400 shadow-md shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
             >
-              {isSubmitting ? 'Creating...' : 'Initialize Shipment'}
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              <span>{isSubmitting ? 'Creating...' : 'Initialize Shipment'}</span>
             </button>
           </div>
         </form>

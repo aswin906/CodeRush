@@ -101,11 +101,12 @@ export async function fetchAuditLogs(shipmentId?: string): Promise<AuditLog[]> {
   return res.json();
 }
 
-export async function triggerSimulationTick(shipmentId?: string): Promise<void> {
+export async function triggerSimulationTick(shipmentId?: string): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/simulation/tick`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipmentId })
   });
   if (!res.ok) throw new Error('Failed to trigger simulation tick');
+  return res.json();
 }
